@@ -1,0 +1,58 @@
+# This query were used to construct all active employees list with their the most recent department
+
+# includes all active employees
+WITH active_employees_table AS
+(SELECT 
+employee.EmployeeId,
+  # Employees age is calculated from the last order date + 1 day
+DATETIME_DIFF(
+  (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+  FROM `adwentureworks_db.salesorderheader`), 
+  BirthDate, YEAR) AS employee_year,
+Gender,
+city,
+HireDate,
+Name
+FROM `adwentureworks_db.employee` employee
+JOIN `adwentureworks_db.EmployeeDepartmentHistory` departmenthistory
+ON employee.EmployeeId = departmenthistory.EmployeeID
+JOIN `adwentureworks_db.department` department
+ON departmenthistory.DepartmentID = department.DepartmentID
+JOIN `adwentureworks_db.employeeaddress` employeeadress
+ON employee.EmployeeId = employeeadress.EmployeeID
+JOIN `adwentureworks_db.address` adress
+ON employeeadress.AddressID = adress.AddressID
+WHERE EndDate IS NULL),
+
+# includes all employees that transferred from other departments
+transfered_employees AS
+(SELECT 
+employee.EmployeeId,
+DATETIME_DIFF(
+  (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+  FROM `adwentureworks_db.salesorderheader`), 
+  BirthDate, YEAR) AS employee_year,
+StartDate,
+EndDate,
+DATETIME_DIFF(EndDate, HireDate, MONTH) AS worked_months_previous_department,
+Name
+FROM `adwentureworks_db.employee` employee
+JOIN `adwentureworks_db.EmployeeDepartmentHistory` departmenthistory
+ON employee.EmployeeId = departmenthistory.EmployeeID
+JOIN `adwentureworks_db.department` department
+ON departmenthistory.DepartmentID = department.DepartmentID
+WHERE EndDate IS NOT NULL
+)
+
+SELECT active.EmployeeId,
+active.Gender,
+active.employee_year,
+active.city,
+active.Hiredate,
+active.Name AS current_department,
+transfered.Name AS transfered_from,
+transfered.worked_months_previous_department,
+FROM active_employees_table active
+LEFT JOIN transfered_employees transfered 
+ON active.EmployeeId = transfered.EmployeeId
+ORDER BY active.EmployeeId

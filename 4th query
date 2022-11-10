@@ -1,0 +1,111 @@
+# This query calculates average pay rate increase for each department. 
+# Every first record of each department's employees pay rates is compared with the most recent record of each department's employees pay rates.
+
+4. Calculating average pay rate increase per department
+# First CTE calculates average of first pay rate record of each employee for every department
+WITH average_first_pay_rate AS
+  (WITH employee_pay_rates AS (SELECT 
+    employee.EmployeeId,
+    employee.HireDate,
+    DATETIME_DIFF(
+      (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+      FROM `adwentureworks_db.salesorderheader`),
+      employee.HireDate, MONTH) AS months_working,
+    payhistory.Rate,
+    payhistory.PayFrequency,
+    VacationHours,
+    SickLeaveHours,
+    DATETIME_DIFF(
+      (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+      FROM `adwentureworks_db.salesorderheader`), 
+      BirthDate, YEAR) AS employee_year,
+    employee.Gender,
+    department.Name AS current_department,
+    payhistory.RateChangeDate
+    FROM `adwentureworks_db.employee` employee
+    JOIN `adwentureworks_db.EmployeeDepartmentHistory` departmenthistory
+    ON employee.EmployeeId = departmenthistory.EmployeeID
+    JOIN `adwentureworks_db.department` department
+    ON departmenthistory.DepartmentID = department.DepartmentID
+    JOIN `adwentureworks_db.employeeaddress` employeeadress
+    ON employee.EmployeeId = employeeadress.EmployeeID
+    JOIN `adwentureworks_db.address` adress
+    ON employeeadress.AddressID = adress.AddressID
+    JOIN `adwentureworks_db.employeepayhistory` payhistory
+    ON payhistory.EmployeeID = employee.EmployeeId 
+    WHERE departmenthistory.EndDate IS NULL
+    ORDER BY employee.EmployeeId ASC
+  ),
+
+    first_pay_rate_record AS
+    (SELECT * 
+    FROM (SELECT *, 
+    ROW_NUMBER() OVER (PARTITION BY EmployeeId ORDER BY RateChangeDate ASC) AS row_num
+    FROM employee_pay_rates)
+    WHERE row_num = 1
+    ORDER BY EmployeeID ASC)
+
+  SELECT 
+  current_department,
+  AVG(Rate) AS average_rate
+  FROM first_pay_rate_record
+  GROUP BY current_department),
+
+# The second CTE calculates average of last pay rate record of each employee for every department
+average_last_pay_rate AS
+  (WITH employee_pay_rates AS (SELECT 
+    employee.EmployeeId,
+    employee.HireDate,
+    DATETIME_DIFF(
+      (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+      FROM `adwentureworks_db.salesorderheader`),
+      employee.HireDate, MONTH) AS months_working,
+    payhistory.Rate,
+    payhistory.PayFrequency,
+    VacationHours,
+    SickLeaveHours,
+      # Employees age is calculated from the last order date + 1 day
+    DATETIME_DIFF(
+      (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+      FROM `adwentureworks_db.salesorderheader`), 
+      BirthDate, YEAR) AS employee_year,
+    employee.Gender,
+    department.Name AS current_department,
+    payhistory.RateChangeDate
+    FROM `adwentureworks_db.employee` employee
+    JOIN `adwentureworks_db.EmployeeDepartmentHistory` departmenthistory
+    ON employee.EmployeeId = departmenthistory.EmployeeID
+    JOIN `adwentureworks_db.department` department
+    ON departmenthistory.DepartmentID = department.DepartmentID
+    JOIN `adwentureworks_db.employeeaddress` employeeadress
+    ON employee.EmployeeId = employeeadress.EmployeeID
+    JOIN `adwentureworks_db.address` adress
+    ON employeeadress.AddressID = adress.AddressID
+    JOIN `adwentureworks_db.employeepayhistory` payhistory
+    ON payhistory.EmployeeID = employee.EmployeeId 
+    WHERE departmenthistory.EndDate IS NULL
+    ORDER BY employee.EmployeeId ASC
+  ),
+
+    the_most_recent_pay_record AS
+    (SELECT * 
+    FROM (SELECT *, 
+    ROW_NUMBER() OVER (PARTITION BY EmployeeId ORDER BY RateChangeDate DESC) AS row_num
+    FROM employee_pay_rates)
+    WHERE row_num = 1 
+    ORDER BY EmployeeID)
+
+    SELECT 
+    current_department,
+    AVG(Rate) AS average_rate
+    FROM the_most_recent_pay_record
+    GROUP BY current_department)
+
+SELECT average_first_pay_rate.current_department,
+average_first_pay_rate.average_rate AS average_first_rate,
+average_last_pay_rate.average_rate AS average_increased_rate,
+((average_last_pay_rate.average_rate - average_first_pay_rate.average_rate)/average_first_pay_rate.average_rate) * 100 AS percentage
+FROM average_first_pay_rate
+JOIN average_last_pay_rate
+ON average_first_pay_rate.current_department = average_last_pay_rate.current_department
+

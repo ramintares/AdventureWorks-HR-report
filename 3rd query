@@ -1,0 +1,54 @@
+# This query were used to calculate median pay rates for each department
+
+WITH employee_pay_rates AS (SELECT 
+  employee.EmployeeId,
+  employee.HireDate,
+  DATETIME_DIFF(
+    (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+    FROM `adwentureworks_db.salesorderheader`),
+    employee.HireDate, MONTH) AS months_working,
+  payhistory.Rate,
+  payhistory.PayFrequency,
+  VacationHours,
+  SickLeaveHours,
+  DATETIME_DIFF(
+    (SELECT DATE_ADD(MAX(CAST(OrderDate AS DATETIME)), INTERVAL 1 DAY)
+    FROM `adwentureworks_db.salesorderheader`), 
+    BirthDate, YEAR) AS employee_year,
+  employee.Gender,
+  department.Name AS current_department,
+  payhistory.RateChangeDate
+  FROM `adwentureworks_db.employee` employee
+  JOIN `adwentureworks_db.EmployeeDepartmentHistory` departmenthistory
+  ON employee.EmployeeId = departmenthistory.EmployeeID
+  JOIN `adwentureworks_db.department` department
+  ON departmenthistory.DepartmentID = department.DepartmentID
+  JOIN `adwentureworks_db.employeeaddress` employeeadress
+  ON employee.EmployeeId = employeeadress.EmployeeID
+  JOIN `adwentureworks_db.address` adress
+  ON employeeadress.AddressID = adress.AddressID
+  JOIN `adwentureworks_db.employeepayhistory` payhistory
+  ON payhistory.EmployeeID = employee.EmployeeId 
+  WHERE departmenthistory.EndDate IS NULL
+  ORDER BY employee.EmployeeId ASC
+),
+
+final_table AS
+(SELECT * 
+FROM (SELECT *, 
+ROW_NUMBER() OVER (PARTITION BY EmployeeId ORDER BY RateChangeDate DESC) AS row_num
+FROM employee_pay_rates)
+WHERE row_num = 1 
+ORDER BY EmployeeID) 
+
+SELECT * 
+FROM (SELECT *, 
+ROW_NUMBER() OVER (PARTITION BY current_department) AS row_num
+FROM (SELECT  
+current_department,
+PERCENTILE_CONT(Rate, 0.5) OVER (PARTITION BY current_department) AS pay_rate_median,
+AVG(VacationHours) AS available_VacationHours,
+AVG(SickLeaveHours) AS available_SickLeaveHours
+FROM final_table
+GROUP BY Rate, current_department))
+WHERE row_num = 1 

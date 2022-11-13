@@ -16,7 +16,9 @@ Scheme:
 
 First part of HR data analysis included overview of employees number change overtime and 
 how number of employees is distributed by age and by gender. The second part of analysis focused on employees pay rates, how it differs across departments, different age and years working at the company groups. 
+
 Link to the dashboard created with Looker Studio: https://datastudio.google.com/reporting/06ebe625-9d22-4255-9607-6732e14a33e9
+
 Link to the presentation created with Visme: https://my.visme.co/view/g7g0dzk0-x835wpzk0x11lmpr
 
 ## Findings
